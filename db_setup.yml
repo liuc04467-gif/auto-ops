@@ -1,0 +1,399 @@
+---
+# ============================================================
+# 阶段三：数据库层
+# - MySQL 8.0 主从复制 (db01 主库 / db02 从库)
+# - 创建应用数据库和用户
+# - 在 web01 部署 PHP 连接测试页面
+# ============================================================
+
+# ========================================
+# Part A: 安装 MySQL 8.0（db01 + db02）
+# ========================================
+- name: Install MySQL on db servers
+  hosts: db
+  gather_facts: yes
+  vars:
+    mysql_root_password: "OpsLab@123"
+    mysql_repl_user: "repl"
+    mysql_repl_password: "Repl@123456"
+
+  tasks:
+    - name: Install MySQL 8.0 server
+      dnf:
+        name:
+          - mysql-server
+          - python3-pip
+        state: present
+
+    - name: Install PyMySQL
+      pip:
+        name: PyMySQL
+        state: present
+
+    - name: Start and enable mysqld
+      systemd:
+        name: mysqld
+        state: started
+        enabled: yes
+
+    - name: Get temporary root password
+      shell: >
+        grep 'temporary password' /var/log/mysqld.log 2>/dev/null
+        | tail -1 | awk '{print $NF}'
+      register: tmp_pass
+      changed_when: false
+
+    - name: Check if root password already set
+      shell: >
+        mysql -u root -p'{{ mysql_root_password }}' -e "SELECT 1" 2>/dev/null
+      register: root_check
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Change root password and secure MySQL
+      when: root_check.rc != 0
+      block:
+        - name: Change root password (first time)
+          shell: >
+            mysql -u root --connect-expired-password
+            -p'{{ tmp_pass.stdout }}'
+            -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+          when: tmp_pass.stdout != ""
+          ignore_errors: yes
+
+        - name: Change root password (fallback - no temp password)
+          shell: >
+            mysql -u root
+            -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+          when: tmp_pass.stdout == ""
+          ignore_errors: yes
+
+    - name: Set root password for all hosts
+      community.mysql.mysql_user:
+        name: root
+        host: "{{ item }}"
+        password: "{{ mysql_root_password }}"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      loop:
+        - localhost
+        - 127.0.0.1
+        - ::1
+      ignore_errors: yes
+
+    - name: Remove anonymous users
+      community.mysql.mysql_user:
+        name: ""
+        host_all: yes
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+    - name: Remove test database
+      community.mysql.mysql_db:
+        name: test
+        state: absent
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+    - name: Open MySQL port
+      firewalld:
+        port: 3306/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+  handlers:
+    - name: reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+
+# ========================================
+# Part B: 配置主库 (db01)
+# ========================================
+- name: Configure MySQL master (db01)
+  hosts: db01
+  gather_facts: no
+  vars:
+    mysql_root_password: "OpsLab@123"
+    mysql_repl_user: "repl"
+    mysql_repl_password: "Repl@123456"
+
+  tasks:
+    - name: Configure master server-id and binary logging
+      lineinfile:
+        path: /etc/my.cnf.d/mysql-server.cnf
+        regexp: "^{{ item.key }}"
+        line: "{{ item.key }} = {{ item.value }}"
+        insertafter: "\\[mysqld\\]"
+      loop:
+        - { key: "server-id", value: "1" }
+        - { key: "log-bin", value: "mysql-bin" }
+        - { key: "binlog-do-db", value: "opslab" }
+        - { key: "bind-address", value: "0.0.0.0" }
+      notify: restart mysqld
+
+    - name: Restart MySQL to apply master config
+      systemd:
+        name: mysqld
+        state: restarted
+      changed_when: false
+
+    - name: Wait for MySQL to be ready
+      wait_for:
+        port: 3306
+        timeout: 30
+
+    - name: Allow root remote access
+      community.mysql.mysql_user:
+        name: root
+        host: "{{ item }}"
+        password: "{{ mysql_root_password }}"
+        priv: "*.*:ALL,GRANT"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      loop:
+        - "10.0.0.15"
+        - "10.0.0.16"
+
+    - name: Create replication user
+      community.mysql.mysql_user:
+        name: "{{ mysql_repl_user }}"
+        host: "10.0.0.%"
+        password: "{{ mysql_repl_password }}"
+        priv: "*.*:REPLICATION SLAVE,REPLICATION CLIENT"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create application database
+      community.mysql.mysql_db:
+        name: opslab
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create application user
+      community.mysql.mysql_user:
+        name: webapp
+        host: "10.0.0.%"
+        password: "WebApp@123"
+        priv: "opslab.*:ALL"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create test table
+      community.mysql.mysql_query:
+        login_db: opslab
+        query: >
+          CREATE TABLE IF NOT EXISTS test_data (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hostname VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+  handlers:
+    - name: restart mysqld
+      systemd:
+        name: mysqld
+        state: restarted
+
+
+# ========================================
+# Part C: 配置从库 (db02)
+# ========================================
+- name: Configure MySQL slave (db02)
+  hosts: db02
+  gather_facts: no
+  vars:
+    mysql_root_password: "OpsLab@123"
+    mysql_repl_user: "repl"
+    mysql_repl_password: "Repl@123456"
+
+  tasks:
+    - name: Configure slave server-id
+      lineinfile:
+        path: /etc/my.cnf.d/mysql-server.cnf
+        regexp: "^{{ item.key }}"
+        line: "{{ item.key }} = {{ item.value }}"
+        insertafter: "\\[mysqld\\]"
+      loop:
+        - { key: "server-id", value: "2" }
+        - { key: "bind-address", value: "0.0.0.0" }
+      notify: restart mysqld
+
+    - name: Restart MySQL to apply slave config
+      systemd:
+        name: mysqld
+        state: restarted
+      changed_when: false
+
+    - name: Wait for MySQL to be ready
+      wait_for:
+        port: 3306
+        timeout: 30
+
+    - name: Get master binary log position
+      community.mysql.mysql_query:
+        login_db: mysql
+        query: "SHOW MASTER STATUS"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_host: "10.0.0.15"
+      register: master_status
+      delegate_to: db01
+
+    - name: Stop replication
+      community.mysql.mysql_replication:
+        mode: stopreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+    - name: Configure replication
+      community.mysql.mysql_replication:
+        mode: changeprimary
+        master_host: "10.0.0.15"
+        master_user: "{{ mysql_repl_user }}"
+        master_password: "{{ mysql_repl_password }}"
+        master_log_file: "{{ master_status.query_result[0][0].File }}"
+        master_log_pos: "{{ master_status.query_result[0][0].Position }}"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Start replication
+      community.mysql.mysql_replication:
+        mode: startreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create application database on slave
+      community.mysql.mysql_db:
+        name: opslab
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create application user on slave
+      community.mysql.mysql_user:
+        name: webapp
+        host: "10.0.0.%"
+        password: "WebApp@123"
+        priv: "opslab.*:SELECT"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Create test table on slave
+      community.mysql.mysql_query:
+        login_db: opslab
+        query: >
+          CREATE TABLE IF NOT EXISTS test_data (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hostname VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Skip replication error and restart
+      community.mysql.mysql_query:
+        query: "SET GLOBAL SQL_SLAVE_SKIP_COUNTER = 1; START SLAVE"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+  handlers:
+    - name: restart mysqld
+      systemd:
+        name: mysqld
+        state: restarted
+
+
+# ========================================
+# Part D: PHP 连接测试页面（web01）
+# ========================================
+- name: Deploy MySQL test page on web01
+  hosts: web01
+  gather_facts: no
+  vars:
+    mysql_app_user: "webapp"
+    mysql_app_password: "WebApp@123"
+
+  tasks:
+    - name: Install PHP MySQL extension
+      dnf:
+        name: php-mysqlnd
+        state: present
+
+    - name: Restart PHP-FPM
+      systemd:
+        name: php-fpm
+        state: restarted
+
+    - name: Deploy MySQL test page
+      copy:
+        content: |
+          <?php
+          header('Content-Type: text/html; charset=utf-8');
+          $hostname = gethostname();
+
+          echo "<h1>OpsLab MySQL Test</h1>";
+          echo "<p><strong>Web Server:</strong> $hostname</p>";
+
+          // Write to master (db01)
+          $master = new mysqli("10.0.0.15", "webapp", "WebApp@123", "opslab");
+          if ($master->connect_error) {
+              echo "<p style='color:red'>Master (db01): FAIL - " . $master->connect_error . "</p>";
+          } else {
+              echo "<p style='color:green'>Master (db01): CONNECTED</p>";
+              $master->query("INSERT INTO test_data (hostname) VALUES ('$hostname')");
+              echo "<p>Inserted row from $hostname, ID: " . $master->insert_id . "</p>";
+              $master->close();
+          }
+
+          // Read from slave (db02)
+          $slave = new mysqli("10.0.0.16", "webapp", "WebApp@123", "opslab");
+          if ($slave->connect_error) {
+              echo "<p style='color:red'>Slave (db02): FAIL - " . $slave->connect_error . "</p>";
+          } else {
+              echo "<p style='color:green'>Slave (db02): CONNECTED</p>";
+              $result = $slave->query("SELECT * FROM test_data ORDER BY id DESC LIMIT 10");
+              echo "<h3>Recent Data (from slave):</h3>";
+              echo "<table border='1' cellpadding='5'><tr><th>ID</th><th>Hostname</th><th>Time</th></tr>";
+              while ($row = $result->fetch_assoc()) {
+                  echo "<tr><td>{$row['id']}</td><td>{$row['hostname']}</td><td>{$row['created_at']}</td></tr>";
+              }
+              echo "</table>";
+              $slave->close();
+          }
+
+          echo "<hr><p>Refresh to insert from $hostname and see if data replicates to slave!</p>";
+          ?>
+        dest: /data/web/html/db_test.php
+        owner: nginx
+        group: nginx
+        mode: "0644"

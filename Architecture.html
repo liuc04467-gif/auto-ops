@@ -1,0 +1,274 @@
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --text: #171717;
+  --text-muted: #52525B;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --brand-on: #FFFFFF;
+  --chart-series-1: #3C2ECA;
+  --chart-series-2: #A9AEFF;
+  --chart-series-3: #6F6FFF;
+  --chart-series-4: #22A5F7;
+  --chart-other: #D3D4DA;
+  --accent: #27D2BF;
+  --accent-2: #F87454;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --radius: 8px;
+  --radius-card: 12px;
+  --radius-full: 999px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-metric: "Inter", "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+:root[data-widget-theme="dark"] {
+  color-scheme: dark;
+  --surface: #171717;
+  --surface-muted: #262626;
+  --text: #E5E5E5;
+  --text-muted: #A1A1AA;
+  --border: rgba(229, 229, 229, 0.12);
+  --brand: #6054F1;
+  --brand-soft: #1A1759;
+  --brand-soft-strong: #3C2ECA;
+  --brand-text: #CFD8FF;
+  --chart-series-1: #4B3FE3;
+  --accent-2: #F87454;
+  --accent-soft: #123F3C;
+  --accent-text: #CCFBF1;
+}
+.widget {
+  color: var(--text);
+  background: transparent;
+  font: var(--weight-regular) var(--text-body) var(--font-sans);
+  letter-spacing: 0;
+}
+.t { fill: var(--text); font: var(--weight-regular) var(--text-body) var(--font-sans); }
+.th { fill: var(--text); font: var(--weight-medium) var(--text-body) var(--font-sans); }
+.ts { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-sans); }
+.tc { fill: var(--text-muted); font: var(--weight-medium) var(--text-code) var(--font-mono); }
+.arr { stroke: var(--text-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.leader { stroke: var(--text-muted); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 5 4; fill: none; }
+.arr-brand { stroke: var(--brand); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.leader-brand { stroke: var(--brand); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 5 4; fill: none; }
+
+g.c-neutral > rect, rect.c-neutral { fill: var(--surface); stroke: var(--border); }
+g.c-brand > rect, rect.c-brand { fill: var(--brand-soft); stroke: var(--brand); }
+.c-brand > .th { fill: var(--brand-text); }
+.c-brand > .ts { fill: var(--brand); }
+g.c-external > rect, rect.c-external { fill: var(--surface-muted); stroke: var(--border); stroke-dasharray: 6 3; }
+.c-external > .th { fill: var(--text); }
+.c-external > .ts { fill: var(--text-muted); }
+g.c-boundary > rect, rect.c-boundary { fill: none; stroke: var(--border); stroke-dasharray: 6 3; }
+.c-boundary > .th { fill: var(--text-muted); }
+.c-boundary > .ts { fill: var(--text-muted); }
+
+.badge-master { fill: var(--brand-soft-strong); stroke: var(--brand); }
+.badge-backup { fill: var(--surface-muted); stroke: var(--text-muted); }
+.badge-primary { fill: var(--brand-soft-strong); stroke: var(--brand); }
+.badge-replica { fill: var(--surface-muted); stroke: var(--text-muted); }
+</style>
+
+<div class="widget" data-dynamic-ui-widget data-template="architecture-elements">
+<svg viewBox="0 0 720 630" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1 1 L7 4 L1 7 Z" fill="var(--text-muted)"/>
+    </marker>
+    <marker id="arr-brand" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/>
+    </marker>
+    <marker id="arr-rev" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M7 1 L1 4 L7 7 Z" fill="var(--text-muted)"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" class="th" style="font: var(--weight-strong) var(--text-title) var(--font-sans);">OpsLab 全栈架构全景图</text>
+
+  <!-- ============================================================ -->
+  <!-- User -->
+  <!-- ============================================================ -->
+  <g class="c-external">
+    <rect x="310" y="48" width="100" height="36" rx="18"/>
+    <text x="360" y="71" text-anchor="middle" class="th">用户</text>
+  </g>
+
+  <!-- User → VIP -->
+  <line x1="360" y1="84" x2="360" y2="100" class="arr-brand" marker-end="url(#arr-brand)"/>
+
+  <!-- ============================================================ -->
+  <!-- VIP -->
+  <!-- ============================================================ -->
+  <g class="c-brand">
+    <rect x="280" y="100" width="160" height="30" rx="15"/>
+    <text x="360" y="120" text-anchor="middle" class="th">VIP 10.0.0.100</text>
+  </g>
+
+  <!-- VIP → LB split -->
+  <path d="M360 130 L360 145 L160 145 L160 148" class="arr-brand" marker-end="url(#arr-brand)"/>
+  <path d="M360 130 L360 145 L560 145 L560 148" class="arr-brand" marker-end="url(#arr-brand)"/>
+
+  <!-- ============================================================ -->
+  <!-- LB Layer -->
+  <!-- ============================================================ -->
+  <g class="c-boundary">
+    <rect x="40" y="148" width="640" height="118" rx="12"/>
+    <text x="56" y="170" class="th">负载均衡层</text>
+    <text x="56" y="188" class="ts">HAProxy + Keepalived</text>
+  </g>
+
+  <!-- lb01 -->
+  <g class="c-neutral">
+    <rect x="90" y="195" width="140" height="56" rx="8"/>
+    <text x="160" y="218" text-anchor="middle" class="th">lb01</text>
+    <text x="160" y="236" text-anchor="middle" class="ts">10.0.0.11 · MASTER</text>
+  </g>
+
+  <!-- lb02 -->
+  <g class="c-neutral">
+    <rect x="490" y="195" width="140" height="56" rx="8"/>
+    <text x="560" y="218" text-anchor="middle" class="th">lb02</text>
+    <text x="560" y="236" text-anchor="middle" class="ts">10.0.0.12 · BACKUP</text>
+  </g>
+
+  <!-- VRRP -->
+  <line x1="230" y1="223" x2="486" y2="223" class="leader" marker-end="url(#arr)" marker-start="url(#arr-rev)"/>
+  <text x="358" y="215" text-anchor="middle" class="ts">VRRP</text>
+
+  <!-- LB → Web -->
+  <line x1="160" y1="251" x2="160" y2="286" class="arr" marker-end="url(#arr)"/>
+  <line x1="560" y1="251" x2="560" y2="286" class="arr" marker-end="url(#arr)"/>
+
+  <!-- ============================================================ -->
+  <!-- Web Layer -->
+  <!-- ============================================================ -->
+  <g class="c-boundary">
+    <rect x="40" y="286" width="640" height="118" rx="12"/>
+    <text x="56" y="308" class="th">Web 应用层</text>
+    <text x="56" y="326" class="ts">Nginx + PHP-FPM</text>
+  </g>
+
+  <!-- web01 -->
+  <g class="c-neutral">
+    <rect x="90" y="333" width="140" height="56" rx="8"/>
+    <text x="160" y="356" text-anchor="middle" class="th">web01</text>
+    <text x="160" y="374" text-anchor="middle" class="ts">10.0.0.13</text>
+  </g>
+
+  <!-- web02 -->
+  <g class="c-neutral">
+    <rect x="490" y="333" width="140" height="56" rx="8"/>
+    <text x="560" y="356" text-anchor="middle" class="th">web02</text>
+    <text x="560" y="374" text-anchor="middle" class="ts">10.0.0.14</text>
+  </g>
+
+  <!-- Web → DB (write) -->
+  <path d="M160 389 L160 406 L130 406 L130 424" class="arr" marker-end="url(#arr)"/>
+  <!-- Web → DB (read) -->
+  <path d="M560 389 L560 406 L290 406 L290 424" class="leader" marker-end="url(#arr)"/>
+
+  <!-- Web → NFS (dashed) -->
+  <path d="M160 389 L160 410 L475 410 L475 448" class="leader" marker-end="url(#arr)"/>
+  <path d="M560 389 L560 410 L475 410" class="leader"/>
+
+  <!-- ============================================================ -->
+  <!-- DB Layer -->
+  <!-- ============================================================ -->
+  <g class="c-boundary">
+    <rect x="40" y="424" width="340" height="118" rx="12"/>
+    <text x="56" y="446" class="th">数据库层</text>
+    <text x="56" y="464" class="ts">MySQL 8.0 主从复制</text>
+  </g>
+
+  <!-- db01 -->
+  <g class="c-neutral">
+    <rect x="60" y="471" width="140" height="56" rx="8"/>
+    <text x="130" y="494" text-anchor="middle" class="th">db01</text>
+    <text x="130" y="512" text-anchor="middle" class="ts">10.0.0.15 · 主库</text>
+  </g>
+
+  <!-- db02 -->
+  <g class="c-neutral">
+    <rect x="220" y="471" width="140" height="56" rx="8"/>
+    <text x="290" y="494" text-anchor="middle" class="th">db02</text>
+    <text x="290" y="512" text-anchor="middle" class="ts">10.0.0.16 · 从库</text>
+  </g>
+
+  <!-- binlog -->
+  <line x1="200" y1="499" x2="216" y2="499" class="arr" marker-end="url(#arr)"/>
+  <text x="208" y="491" text-anchor="middle" class="ts">binlog</text>
+
+  <!-- ============================================================ -->
+  <!-- Storage & Monitor -->
+  <!-- ============================================================ -->
+  <g class="c-boundary">
+    <rect x="405" y="424" width="275" height="118" rx="12"/>
+    <text x="421" y="446" class="th">存储与监控</text>
+  </g>
+
+  <!-- m1 (NFS + Ansible) -->
+  <g class="c-neutral">
+    <rect x="420" y="471" width="115" height="56" rx="8"/>
+    <text x="477" y="494" text-anchor="middle" class="th">m1</text>
+    <text x="477" y="512" text-anchor="middle" class="ts">NFS · Ansible</text>
+  </g>
+
+  <!-- monitor -->
+  <g class="c-neutral">
+    <rect x="550" y="471" width="115" height="56" rx="8"/>
+    <text x="607" y="494" text-anchor="middle" class="th">monitor</text>
+    <text x="607" y="512" text-anchor="middle" class="ts">Prometheus</text>
+  </g>
+
+  <!-- Monitor collection (dashed from boundaries) -->
+  <path d="M607 471 L607 460 L680 460 L680 404 L640 404" class="leader"/>
+  <path d="M607 471 L607 460 L680 460 L680 266 L640 266" class="leader"/>
+  <path d="M607 471 L607 460 L680 460 L680 148 L640 148" class="leader"/>
+
+  <!-- ============================================================ -->
+  <!-- Legend -->
+  <!-- ============================================================ -->
+  <g transform="translate(80, 568)">
+    <rect x="0" y="0" width="560" height="48" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+    <!-- traffic -->
+    <line x1="16" y1="16" x2="52" y2="16" class="arr-brand" marker-end="url(#arr-brand)"/>
+    <text x="60" y="21" class="ts">业务流量</text>
+    <!-- NFS -->
+    <line x1="140" y1="16" x2="176" y2="16" class="leader"/>
+    <text x="184" y="21" class="ts">NFS 共享存储</text>
+    <!-- monitor -->
+    <line x1="292" y1="16" x2="328" y2="16" class="leader"/>
+    <text x="336" y="21" class="ts">监控采集</text>
+    <!-- VRRP -->
+    <line x1="440" y1="16" x2="476" y2="16" class="leader" marker-end="url(#arr)" marker-start="url(#arr-rev)"/>
+    <text x="484" y="21" class="ts">VRRP 心跳</text>
+    <!-- bottom -->
+    <text x="280" y="40" text-anchor="middle" class="ts">m1 (10.0.0.10) 通过 Ansible 管控所有节点 · 账号 root / opsuser</text>
+  </g>
+
+</svg>
+</div>
