@@ -1,0 +1,78 @@
+// OpsLab CI/CD Pipeline
+// Stages: Build → Test → Push → Deploy → Verify
+
+pipeline {
+    agent any
+
+    environment {
+        HARBOR_URL = 'harbor.opslab.local'
+        IMAGE_NAME = 'opslab/web-app'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        KUBECONFIG = credentials('kubeconfig')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    docker build \
+                      -f docker/Dockerfile \
+                      -t ${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+                      .
+                '''
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'echo "Running unit tests..."'
+                // Add actual test commands here
+            }
+        }
+
+        stage('Push to Harbor') {
+            steps {
+                sh '''
+                    docker login ${HARBOR_URL} -u $HARBOR_USER -p $HARBOR_PASS
+                    docker push ${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Deploy to K8s') {
+            steps {
+                sh '''
+                    kubectl set image deployment/web-app \
+                      web-app=${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
+                      -n opslab
+                    kubectl rollout status deployment/web-app -n opslab
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh '''
+                    sleep 5
+                    kubectl get pods -n opslab
+                    curl -s -o /dev/null -w "%{http_code}" http://app.opslab.local/health
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Deploy successful: ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
+            echo "Deploy failed"
+        }
+    }
+}

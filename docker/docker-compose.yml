@@ -1,0 +1,47 @@
+# OpsLab - Local development with Docker Compose
+# Usage: docker-compose up -d
+
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: <REDACTED>
+      MYSQL_DATABASE: opslab
+      MYSQL_USER: webapp
+      MYSQL_PASSWORD: <REDACTED>
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: <REDACTED>
+    depends_on:
+      - prometheus
+
+volumes:
+  db_data:

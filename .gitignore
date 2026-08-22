@@ -1,0 +1,30 @@
+# Secrets
+*.key
+*.pem
+*.crt
+.env
+*credentials*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Ansible
+*.retry
+ansible/*.retry
+
+# Screenshots (selective upload)
+screenshots/*.raw
+screenshots/*.tmp
+
+# Large files
+*.rpm
+*.tar.gz
+*.iso
