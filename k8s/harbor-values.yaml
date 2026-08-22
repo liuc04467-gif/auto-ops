@@ -1,0 +1,97 @@
+expose:
+  type: nodePort
+  tls:
+    enabled: false
+  nodePort:
+    ports:
+      http:
+        nodePort: 30080
+
+externalURL: http://10.0.0.18:30080
+
+harborAdminPassword: "Harbor12345"
+
+# 关闭不需要的组件（节省资源）
+trivy:
+  enabled: false
+notary:
+  enabled: false
+chartmuseum:
+  enabled: false
+
+# 使用 local-path StorageClass
+persistence:
+  persistentVolumeClaim:
+    registry:
+      storageClass: "local-path"
+      accessMode: ReadWriteOnce
+      size: 5Gi
+    database:
+      storageClass: "local-path"
+      accessMode: ReadWriteOnce
+      size: 2Gi
+    redis:
+      storageClass: "local-path"
+      accessMode: ReadWriteOnce
+      size: 1Gi
+    jobservice:
+      storageClass: "local-path"
+      accessMode: ReadWriteOnce
+      size: 1Gi
+
+# 最小资源
+core:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+registry:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+database:
+  internal:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+redis:
+  internal:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+jobservice:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+portal:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi
+
+logLevel: info
+
+updateStrategy:
+  type: Recreate

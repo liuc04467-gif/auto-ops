@@ -1,0 +1,180 @@
+# Redis Master 主从
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cache
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-conf
+  namespace: cache
+data:
+  redis-master.conf: |
+    bind 0.0.0.0
+    port 6379
+    requirepass Redis12345
+    appendonly yes
+    save 900 1
+    save 300 10
+    save 60 10000
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+  redis-slave.conf: |
+    bind 0.0.0.0
+    port 6379
+    slaveof redis-master.cache.svc.cluster.local 6379
+    masterauth Redis12345
+    requirepass Redis12345
+    appendonly yes
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  namespace: cache
+  labels:
+    app: redis
+    role: master
+spec:
+  selector:
+    app: redis
+    role: master
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-master
+  namespace: cache
+spec:
+  serviceName: redis-master
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      role: master
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: master
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8s-node1.opslab.local
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-conf
+              mountPath: /etc/redis
+      volumes:
+        - name: redis-conf
+          configMap:
+            name: redis-conf
+            items:
+              - key: redis-master.conf
+                path: redis.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-slave
+  namespace: cache
+  labels:
+    app: redis
+    role: slave
+spec:
+  selector:
+    app: redis
+    role: slave
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-slave
+  namespace: cache
+spec:
+  serviceName: redis-slave
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      role: slave
+  template:
+    metadata:
+      labels:
+        app: redis
+        role: slave
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8s-node2.opslab.local
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-conf
+              mountPath: /etc/redis
+      volumes:
+        - name: redis-conf
+          configMap:
+            name: redis-conf
+            items:
+              - key: redis-slave.conf
+                path: redis.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi

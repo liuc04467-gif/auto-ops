@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k8s-node2.opslab.local
+      containers:
+        - name: kibana
+          image: docker.elastic.co/kibana/kibana:8.13.0
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: "http://elasticsearch.logging.svc.cluster.local:9200"
+            - name: SERVER_HOST
+              value: "0.0.0.0"
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=768"
+          ports:
+            - containerPort: 5601
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
