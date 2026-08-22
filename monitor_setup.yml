@@ -1,0 +1,403 @@
+---
+# ============================================================
+# 阶段四：监控层
+# - Node Exporter 部署到所有服务器
+# - MySQL Exporter (db01/db02)
+# - HAProxy Exporter (lb01/lb02)
+# - Prometheus + Grafana (monitor)
+# ============================================================
+
+# ========================================
+# Part A: Node Exporter（所有7台服务器）
+# ========================================
+- name: Deploy Node Exporter on all servers
+  hosts: all
+  gather_facts: yes
+  vars:
+    node_exporter_version: "1.8.2"
+
+  tasks:
+    - name: Download Node Exporter
+      get_url:
+        url: "http://10.0.0.10:8000/node_exporter.tar.gz"
+        dest: "/tmp/node_exporter.tar.gz"
+        mode: "0644"
+
+    - name: Extract Node Exporter
+      shell: tar xzf /tmp/node_exporter.tar.gz -C /usr/local/bin --strip-components=1
+      args:
+        creates: /usr/local/bin/node_exporter
+
+    - name: Create node_exporter user
+      user:
+        name: node_exporter
+        shell: /sbin/nologin
+        create_home: no
+
+    - name: Create systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter \
+            --collector.systemd \
+            --collector.processes
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/node_exporter.service
+
+    - name: Start Node Exporter
+      systemd:
+        name: node_exporter
+        daemon_reload: yes
+        state: started
+        enabled: yes
+
+    - name: Open Node Exporter port
+      firewalld:
+        port: 9100/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+  handlers:
+    - name: reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+
+# ========================================
+# Part B: MySQL Exporter (db01/db02)
+# ========================================
+- name: Deploy MySQL Exporter on db servers
+  hosts: db
+  gather_facts: no
+  vars:
+    mysql_exporter_version: "0.16.0"
+    mysql_root_password: "OpsLab@123"
+
+  tasks:
+    - name: Create monitoring user on MySQL
+      community.mysql.mysql_query:
+        query: >
+          CREATE USER IF NOT EXISTS 'exporter'@'localhost'
+          IDENTIFIED BY 'Monitor@123'
+          WITH MAX_USER_CONNECTIONS 3
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+    - name: Grant privileges to monitoring user
+      community.mysql.mysql_query:
+        query: >
+          GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.*
+          TO 'exporter'@'localhost'
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+      ignore_errors: yes
+
+    - name: Flush privileges
+      community.mysql.mysql_query:
+        query: "FLUSH PRIVILEGES"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+
+    - name: Download MySQL Exporter
+      get_url:
+        url: "http://10.0.0.10:8000/mysqld_exporter.tar.gz"
+        dest: "/tmp/mysqld_exporter.tar.gz"
+        mode: "0644"
+
+    - name: Extract MySQL Exporter
+      shell: tar xzf /tmp/mysqld_exporter.tar.gz -C /usr/local/bin --strip-components=1
+      args:
+        creates: /usr/local/bin/mysqld_exporter
+
+    - name: Create MySQL Exporter config
+      copy:
+        content: |
+          [client]
+          user=exporter
+          password=Monitor@123
+        dest: /etc/.mysqld_exporter.cnf
+        mode: "0600"
+
+    - name: Create systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus MySQL Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/mysqld_exporter \
+            --config.my-cnf=/etc/.mysqld_exporter.cnf
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/mysqld_exporter.service
+
+    - name: Start MySQL Exporter
+      systemd:
+        name: mysqld_exporter
+        daemon_reload: yes
+        state: started
+        enabled: yes
+
+    - name: Open MySQL Exporter port
+      firewalld:
+        port: 9104/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+  handlers:
+    - name: reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+
+# ========================================
+# Part C: HAProxy Exporter (lb01/lb02)
+# ========================================
+- name: Deploy HAProxy Exporter on lb servers
+  hosts: lb
+  gather_facts: no
+  vars:
+    haproxy_exporter_version: "0.15.0"
+
+  tasks:
+    - name: Enable HAProxy stats socket
+      lineinfile:
+        path: /etc/haproxy/haproxy.cfg
+        line: "    stats socket /run/haproxy/admin.sock mode 660 level admin"
+        insertafter: "^global"
+      notify: restart haproxy
+
+    - name: Create HAProxy run directory
+      file:
+        path: /run/haproxy
+        state: directory
+        owner: haproxy
+        group: haproxy
+        mode: "0755"
+
+    - name: Restart HAProxy for stats socket
+      systemd:
+        name: haproxy
+        state: restarted
+      changed_when: false
+
+    - name: Download HAProxy Exporter
+      get_url:
+        url: "http://10.0.0.10:8000/haproxy_exporter.tar.gz"
+        dest: "/tmp/haproxy_exporter.tar.gz"
+        mode: "0644"
+
+    - name: Extract HAProxy Exporter
+      shell: tar xzf /tmp/haproxy_exporter.tar.gz -C /usr/local/bin --strip-components=1
+      args:
+        creates: /usr/local/bin/haproxy_exporter
+
+    - name: Create systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus HAProxy Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/haproxy_exporter \
+            --haproxy.scrape-uri=unix:/run/haproxy/admin.sock
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/haproxy_exporter.service
+
+    - name: Start HAProxy Exporter
+      systemd:
+        name: haproxy_exporter
+        daemon_reload: yes
+        state: started
+        enabled: yes
+
+    - name: Open HAProxy Exporter port
+      firewalld:
+        port: 9101/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+  handlers:
+    - name: restart haproxy
+      systemd:
+        name: haproxy
+        state: restarted
+
+    - name: reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+
+
+# ========================================
+# Part D: Prometheus + Grafana (monitor)
+# ========================================
+- name: Deploy Prometheus and Grafana on monitor
+  hosts: monitor
+  gather_facts: yes
+  vars:
+    prometheus_version: "2.55.1"
+
+  tasks:
+    # --- Prometheus ---
+    - name: Download Prometheus
+      get_url:
+        url: "http://10.0.0.10:8000/prometheus.tar.gz"
+        dest: "/tmp/prometheus.tar.gz"
+        mode: "0644"
+
+    - name: Extract Prometheus
+      shell: tar xzf /tmp/prometheus.tar.gz -C /opt
+      args:
+        creates: /opt/prometheus-{{ prometheus_version }}.linux-amd64
+
+    - name: Create symlink for Prometheus
+      file:
+        src: "/opt/prometheus-{{ prometheus_version }}.linux-amd64"
+        dest: /opt/prometheus
+        state: link
+
+    - name: Create prometheus user
+      user:
+        name: prometheus
+        shell: /sbin/nologin
+        create_home: no
+
+    - name: Create Prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Configure Prometheus
+      copy:
+        content: |
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+
+          alerting:
+            alertmanagers:
+              - static_configs:
+                  - targets: []
+
+          rule_files: []
+
+          scrape_configs:
+            - job_name: "node"
+              static_configs:
+                - targets:
+                    - "10.0.0.10:9100"
+                    - "10.0.0.11:9100"
+                    - "10.0.0.12:9100"
+                    - "10.0.0.13:9100"
+                    - "10.0.0.14:9100"
+                    - "10.0.0.15:9100"
+                    - "10.0.0.16:9100"
+                    - "10.0.0.17:9100"
+
+            - job_name: "haproxy"
+              static_configs:
+                - targets:
+                    - "10.0.0.11:9101"
+                    - "10.0.0.12:9101"
+
+            - job_name: "mysql"
+              static_configs:
+                - targets:
+                    - "10.0.0.15:9104"
+                    - "10.0.0.16:9104"
+        dest: /etc/prometheus/prometheus.yml
+        owner: prometheus
+        group: prometheus
+
+    - name: Create systemd service for Prometheus
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus
+          After=network.target
+
+          [Service]
+          User=prometheus
+          Group=prometheus
+          Type=simple
+          ExecStart=/opt/prometheus/prometheus \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --storage.tsdb.path=/var/lib/prometheus \
+            --web.console.templates=/opt/prometheus/consoles \
+            --web.console.libraries=/opt/prometheus/console_libraries \
+            --storage.tsdb.retention.time=15d
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/prometheus.service
+
+    - name: Start Prometheus
+      systemd:
+        name: prometheus
+        daemon_reload: yes
+        state: started
+        enabled: yes
+
+    - name: Open Prometheus port
+      firewalld:
+        port: 9090/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+    # --- Grafana ---
+    - name: Install Grafana from local RPM
+      dnf:
+        name: "http://10.0.0.10:8000/grafana.rpm"
+        state: present
+        disable_gpg_check: yes
+
+    - name: Start Grafana
+      systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+
+    - name: Open Grafana port
+      firewalld:
+        port: 3000/tcp
+        permanent: yes
+        state: enabled
+      notify: reload firewalld
+
+  handlers:
+    - name: reload firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
