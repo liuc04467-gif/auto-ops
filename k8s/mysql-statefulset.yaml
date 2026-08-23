@@ -1,0 +1,94 @@
+# MySQL 8.0 StatefulSet（数据层迁移到 K8s）
+# 访问：mysql.opslab.svc.cluster.local:3306（headless）
+# 数据迁移见 docs/06-kubernetes/12-mysql-statefulset.md
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: opslab
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: "123456"       # 生产务必改强密码
+  MYSQL_DATABASE: "opslab"
+  MYSQL_USER: "webapp"
+  MYSQL_PASSWORD: "<REDACTED>"         # 与 VM 层 db01 webapp 密码保持一致
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: opslab
+  labels:
+    app: mysql
+spec:
+  clusterIP: None        # headless，配合 StatefulSet 稳定网络标识 mysql-0
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: opslab
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          args:
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+            - --default-authentication-plugin=mysql_native_password
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_DATABASE }
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_USER }
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_PASSWORD }
+          ports:
+            - containerPort: 3306
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -uroot -p$MYSQL_ROOT_PASSWORD"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "mysqladmin ping -uroot -p$MYSQL_ROOT_PASSWORD"]
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 10Gi

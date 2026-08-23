@@ -103,3 +103,19 @@ containerd 必须启用 CRI (`disabled_plugins=[]`) 和 `SystemdCgroup = true`�
 - [`k8s/harbor-values-ingress.yaml`](../../k8s/harbor-values-ingress.yaml) — Harbor HTTPS values
 - [`k8s/containerd-harbor-hosts.toml`](../../k8s/containerd-harbor-hosts.toml) — containerd 信任 Harbor
 - [`scripts/harbor-tls.sh`](../../scripts/harbor-tls.sh) — 自签证书生成脚本
+
+## 八、生产级补充（应用落地 / 数据层 / 监控）
+
+| 编号 | 文档 | 内容 |
+|---|---|---|
+| 12 | [12-mysql-statefulset.md](12-mysql-statefulset.md) | MySQL 迁移 K8s（StatefulSet + 数据迁移步骤） |
+| 13 | [13-monitoring-k8s.md](13-monitoring-k8s.md) | node_exporter + kube-state-metrics 监控补齐 |
+
+配套文件：
+
+- [`app/`](../../app/) — 示例应用（index.php + health.php）
+- [`docker/Dockerfile`](../../docker/Dockerfile) — 应用镜像（Nginx + PHP-FPM 单容器）
+- [`k8s/mysql-statefulset.yaml`](../../k8s/mysql-statefulset.yaml) — MySQL StatefulSet
+- [`k8s/node-exporter.yaml`](../../k8s/node-exporter.yaml) — 节点指标
+- [`k8s/kube-state-metrics.yaml`](../../k8s/kube-state-metrics.yaml) — K8s 状态指标
+- [`scripts/es-snapshot.sh`](../../scripts/es-snapshot.sh) — ES 快照备份

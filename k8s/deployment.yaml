@@ -1,3 +1,8 @@
+# OpsLab 自研应用 Deployment（Nginx + PHP-FPM 单容器）
+# 镜像由 docker/Dockerfile 构建：harbor.opslab.local/ops-app/webapp:<TAG>
+# 探针调优：
+#   - startupProbe：冷启动缓冲（最多 150s），避免慢启动被 liveness 误杀
+#   - liveness/readiness initialDelay 基于 startup 成功后再计
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +12,11 @@ metadata:
     app: web
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0    # 滚动更新期间不中断服务
+      maxSurge: 1
   selector:
     matchLabels:
       app: web
@@ -16,26 +26,52 @@ spec:
         app: web
     spec:
       containers:
-      - name: php-app
-        image: harbor.opslab.local/opslab/web-app:v1.0
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 250m
-            memory: 256Mi
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 5
+        - name: php-app
+          image: harbor.opslab.local/ops-app/webapp:v1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          env:
+            - name: REDIS_WRITE_HOST
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: REDIS_WRITE_HOST }
+            - name: REDIS_READ_HOST
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: REDIS_READ_HOST }
+            - name: REDIS_PASSWORD
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: REDIS_PASSWORD }
+            - name: DB_HOST
+              value: mysql.opslab.svc.cluster.local
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_DATABASE }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_USER }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: mysql-secret, key: MYSQL_PASSWORD }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

@@ -1,0 +1,48 @@
+# node_exporter DaemonSet：暴露每节点 9100 指标，供 VM 层 Prometheus 采集
+# 对应 configs/prometheus/prometheus.yml 的 k8s-node job（10.0.0.18-20:9100）
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.2
+          args:
+            - --path.rootfs=/host
+          ports:
+            - containerPort: 9100
+              hostPort: 9100
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: root
+              mountPath: /host
+              readOnly: true
+      volumes:
+        - name: proc
+          hostPath: { path: /proc }
+        - name: sys
+          hostPath: { path: /sys }
+        - name: root
+          hostPath: { path: / }

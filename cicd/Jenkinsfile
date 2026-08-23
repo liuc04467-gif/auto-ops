@@ -1,19 +1,31 @@
-// OpsLab CI/CD Pipeline：Build → Push → Deploy → Verify
+// OpsLab CI/CD Pipeline：Build → Push → Deploy（Kubernetes 动态 agent）
 //
-// 部署环境：
+// 环境：
 //   Jenkins : http://10.0.0.18:30081  (K8s devops 命名空间)
 //   Harbor  : http://10.0.0.18:30080  (admin / Harbor12345)
-//   K8s API : k8s-master (10.0.0.18:6443)
+//   K8s API : https://kubernetes.default.svc.cluster.local
 //
-// 凭证配置（Jenkins → Manage Credentials → Add）：
+// Jenkins Kubernetes Cloud 配置（Jenkins → Manage Jenkins → Clouds → Kubernetes）：
+//   - Kubernetes URL       : https://kubernetes.default.svc.cluster.local
+//   - Kubernetes Namespace : devops
+//   - Credentials          : devops 命名空间 serviceaccount 的 token
+//   - Pod Template (label: opslab-agent)：
+//       容器1 jnlp    : jenkins/inbound-agent:latest-jdk11
+//       容器2 docker  : docker:27-dind（需 privileged，Build/Push 用）
+//       容器3 kubectl : bitnami/kubectl:latest（Deploy 用）
+//
+// 凭证（Jenkins → Manage Credentials → Add）：
 //   1. Username with password → ID: harbor-creds（admin / Harbor12345）
-//   2. Secret text           → ID: kube-config（内容为 /root/.kube/config 的 base64）
+//   2. Secret text           → ID: kube-config（/root/.kube/config 的 base64）
 //
-// Harbor 项目：登录 30080 后台新建项目 ops-app（公开或私有）
-// containerd 信任：所有 K8s 节点配置 k8s/containerd-harbor-hosts.toml
+// 说明：本文件是"配方"；Pod Template 需在 Jenkins UI 手动配置一次（无法写死）。
 
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            label 'opslab-agent'
+        }
+    }
 
     environment {
         HARBOR = '10.0.0.18:30080'
@@ -23,24 +35,30 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                sh 'docker build -t ${IMAGE} .'
+                container('docker') {
+                    sh 'docker build -f docker/Dockerfile -t ${IMAGE} .'
+                }
             }
         }
 
         stage('Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'harbor-creds',
-                                                 usernameVariable: 'U', passwordVariable: 'P')]) {
-                    sh 'echo $P | docker login ${HARBOR} -u $U --password-stdin'
-                    sh 'docker push ${IMAGE}'
+                container('docker') {
+                    withCredentials([usernamePassword(credentialsId: 'harbor-creds',
+                                                     usernameVariable: 'U', passwordVariable: 'P')]) {
+                        sh 'echo $P | docker login ${HARBOR} -u $U --password-stdin'
+                        sh 'docker push ${IMAGE}'
+                    }
                 }
             }
         }
 
         stage('Deploy') {
             steps {
-                withCredentials([string(credentialsId: 'kube-config', variable: 'KC')]) {
-                    sh 'echo $KC | base64 -d > /tmp/kubeconfig && export KUBECONFIG=/tmp/kubeconfig && kubectl set image deploy/webapp webapp=${IMAGE} && kubectl rollout status deploy/webapp'
+                container('kubectl') {
+                    withCredentials([string(credentialsId: 'kube-config', variable: 'KC')]) {
+                        sh 'echo "$KC" | base64 -d > /tmp/kubeconfig && export KUBECONFIG=/tmp/kubeconfig && kubectl -n opslab set image deploy/web-app php-app=${IMAGE} && kubectl -n opslab rollout status deploy/web-app'
+                    }
                 }
             }
         }

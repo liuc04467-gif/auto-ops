@@ -69,3 +69,25 @@ helm install harbor harbor/harbor -n harbor --create-namespace -f k8s/harbor-val
 - Harbor HTTPS：[11-harbor-https.md](../docs/06-kubernetes/11-harbor-https.md)
 
 证书生成脚本：[scripts/harbor-tls.sh](../scripts/harbor-tls.sh)
+
+## 七、生产级补充（应用容器化 / MySQL on K8s / 监控）
+
+| 文件 | 用途 |
+|---|---|
+| `configmap.yaml` | 应用配置（Redis 读写分离，namespace 已统一为 opslab） |
+| `mysql-statefulset.yaml` | MySQL 8.0 StatefulSet + Secret + headless Service（数据层迁移 K8s） |
+| `node-exporter.yaml` | 节点指标 DaemonSet（9100，供 VM 层 Prometheus 采集） |
+| `kube-state-metrics.yaml` | K8s 对象状态指标（Deployment/Pod/Service/PVC） |
+| `deployment.yaml` | 应用 Deployment（Nginx+PHP-FPM 单容器，startupProbe + 探针调优） |
+
+应用代码与镜像：
+
+- [`app/`](../app/) — 示例应用（index.php 展示身份 + Redis 读写分离 + MySQL 连通性，health.php 探针端点）
+- [`docker/Dockerfile`](../docker/Dockerfile) — 应用镜像构建（Nginx + PHP-FPM 单容器）
+- [`docker/docker-compose.yml`](../docker/docker-compose.yml) — 本地开发环境
+- [`scripts/es-snapshot.sh`](../scripts/es-snapshot.sh) — ES 快照备份脚本
+
+对应文档：
+
+- MySQL 迁移：[12-mysql-statefulset.md](../docs/06-kubernetes/12-mysql-statefulset.md)
+- K8s 监控：[13-monitoring-k8s.md](../docs/06-kubernetes/13-monitoring-k8s.md)

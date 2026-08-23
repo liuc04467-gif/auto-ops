@@ -1,28 +1,36 @@
-# OpsLab - PHP application Dockerfile
-# Multi-stage build: builder → runtime
-#
-# Stage 1: Builder (compile PHP extensions)
-FROM php:8.0-fpm-alpine AS builder
+# OpsLab - PHP 应用镜像（Nginx + PHP-FPM 单容器）
+# 构建：docker build -f docker/Dockerfile -t harbor.opslab.local/ops-app/webapp:<TAG> .
+# 技术栈：Nginx 1.25(alpine) + PHP-FPM 8.0，supervisord 托管两个进程，对外 80 端口
+# 扩展：pdo_mysql / mysqli / redis / opcache（对齐传统架构 web01/web02 的依赖）
 
-RUN docker-php-ext-install pdo_mysql mysqli && \
-    docker-php-ext-enable opcache
+FROM php:8.0-fpm-alpine
 
-# Stage 2: Runtime (slim image)
-FROM php:8.0-fpm-alpine AS runtime
+# 安装 nginx、supervisor、PHP 扩展编译依赖
+RUN apk add --no-cache nginx supervisor $PHPIZE_DEPS \
+    && docker-php-ext-install pdo_mysql mysqli opcache \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del $PHPIZE_DEPS \
+    && rm -rf /var/cache/apk/*
 
-COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
-COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
+# 容器内配置（nginx 反代 php-fpm，supervisord 托管两进程）
+COPY docker/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/supervisord.conf /etc/supervisord.conf
 
-# Copy application code
-COPY . /var/www/html
+# 应用代码（构建上下文 = 仓库根）
+COPY app/ /var/www/html/
 
-RUN chown -R www-data:www-data /var/www/html && \
-    chmod -R 755 /var/www/html
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html \
+    && { \
+        echo 'opcache.memory_consumption=128'; \
+        echo 'opcache.max_accelerated_files=20000'; \
+        echo 'opcache.validate_timestamps=0'; \
+    } > /usr/local/etc/php/conf.d/opcache.ini
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost/health || exit 1
+EXPOSE 80
 
-# Image size optimization:
-# - Alpine base: ~40MB (vs Debian ~150MB)
-# - Multi-stage: no build tools in runtime
-# - .dockerignore: exclude tests, docs, .git
+HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
+    CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
