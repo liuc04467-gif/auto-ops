@@ -33,3 +33,17 @@ scrape_configs:
       - targets:
           - "10.0.0.15:9104"
           - "10.0.0.16:9104"
+
+  # K8s 节点（node_exporter 待部署到 k8s-master/node1/node2 后启用）
+  - job_name: "k8s-node"
+    static_configs:
+      - targets:
+          - "10.0.0.18:9100"   # k8s-master（待部署 node_exporter）
+          - "10.0.0.19:9100"   # k8s-node1（待部署 node_exporter）
+          - "10.0.0.20:9100"   # k8s-node2（待部署 node_exporter）
+
+  # K8s 集群指标（进阶）：使用 Prometheus Operator + ServiceMonitor 采集
+  #   - kube-state-metrics（Deployment/StatefulSet/Pod 指标）
+  #   - cAdvisor（内置于 kubelet :10250）
+  #   - kubelet metrics（:10250/metrics）
+  # 部署方式：helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack
