@@ -50,3 +50,22 @@ helm install harbor harbor/harbor -n harbor --create-namespace -f k8s/harbor-val
 - 部署总览：[docs/06-kubernetes/README.md](../docs/06-kubernetes/README.md)
 - 故障排查：[docs/troubleshooting/06-k8s-middleware-troubleshooting.md](../docs/troubleshooting/06-k8s-middleware-troubleshooting.md)
 - 新增文件清单：[docs/06-kubernetes/ADDED_FILES.md](../docs/06-kubernetes/ADDED_FILES.md)
+
+
+## 六、进阶接入（应用层 / CI-CD / 日志 / HTTPS）
+
+| 文件 | 用途 |
+|---|---|
+| `configmap.yaml` | 应用接入 Redis 主从的连接参数（读写分离 host/port/password） |
+| `fluentbit.yaml` | 容器日志采集 DaemonSet（→ Elasticsearch → Kibana） |
+| `harbor-values-ingress.yaml` | Harbor HTTPS 部署（Ingress + 自签证书） |
+| `containerd-harbor-hosts.toml` | containerd 信任 Harbor 镜像仓库配置 |
+
+对应实施文档：
+
+- Redis 接入：[08-redis-access.md](../docs/06-kubernetes/08-redis-access.md)
+- CI/CD 联动：[09-cicd-jenkins-harbor.md](../docs/06-kubernetes/09-cicd-jenkins-harbor.md)
+- 日志采集：[10-logging-efk.md](../docs/06-kubernetes/10-logging-efk.md)
+- Harbor HTTPS：[11-harbor-https.md](../docs/06-kubernetes/11-harbor-https.md)
+
+证书生成脚本：[scripts/harbor-tls.sh](../scripts/harbor-tls.sh)

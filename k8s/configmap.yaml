@@ -1,0 +1,12 @@
+# 应用接入 Redis 主从的连接配置（应用 Pod 跨命名空间访问 cache 的 Redis）
+# 说明：生产环境建议将密码移入 Secret，此处为教学演示直接在 ConfigMap 中声明
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: opslab
+data:
+  REDIS_WRITE_HOST: "redis-master.cache.svc.cluster.local"
+  REDIS_READ_HOST: "redis-slave.cache.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "Redis12345"

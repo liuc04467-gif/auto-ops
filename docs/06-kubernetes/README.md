@@ -85,3 +85,21 @@ containerd 必须启用 CRI (`disabled_plugins=[]`) 和 `SystemdCgroup = true`�
 | 8 | harbor-jobservice PVC 被误删后 Deployment Pending | PVC 与 Deployment 强关联 | 手动重建 1Gi local-path PVC |
 | 9 | Harbor core 启动超时 CrashLoopBackOff | PostgreSQL 初始化期间 DB 尚未监听 5432 | DB Ready 后重启 core Deployment |
 | 10 | **Kibana OOM (FatalProcessOutOfMemory)** | 初始 req=256M/lim=512M 太小，Node.js V8 堆不够 | **升级为 req=512M/lim=1Gi + NODE_OPTIONS=--max-old-space-size=768** |
+
+
+## 七、进阶接入（逐步落地）
+
+| 编号 | 文档 | 内容 |
+|---|---|---|
+| 08 | [08-redis-access.md](08-redis-access.md) | Redis 主从应用接入（读写分离，PHP/Node 示例） |
+| 09 | [09-cicd-jenkins-harbor.md](09-cicd-jenkins-harbor.md) | Jenkins + Harbor 联动 CI/CD |
+| 10 | [10-logging-efk.md](10-logging-efk.md) | Fluent Bit → ES → Kibana 日志采集 |
+| 11 | [11-harbor-https.md](11-harbor-https.md) | Harbor HTTPS（Ingress + 自签证书） |
+
+配套文件：
+
+- [`k8s/configmap.yaml`](../../k8s/configmap.yaml) — Redis 连接 ConfigMap
+- [`k8s/fluentbit.yaml`](../../k8s/fluentbit.yaml) — Fluent Bit DaemonSet
+- [`k8s/harbor-values-ingress.yaml`](../../k8s/harbor-values-ingress.yaml) — Harbor HTTPS values
+- [`k8s/containerd-harbor-hosts.toml`](../../k8s/containerd-harbor-hosts.toml) — containerd 信任 Harbor
+- [`scripts/harbor-tls.sh`](../../scripts/harbor-tls.sh) — 自签证书生成脚本

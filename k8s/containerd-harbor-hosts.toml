@@ -1,0 +1,15 @@
+# containerd 信任 Harbor 镜像仓库配置（所有 K8s 节点）
+#
+# HTTP 阶段部署路径（当前）：
+#   /etc/containerd/certs.d/10.0.0.18:30080/hosts.toml
+#
+# HTTPS 阶段部署路径（切换后）：
+#   /etc/containerd/certs.d/harbor.opslab.local/hosts.toml  + 同目录 ca.crt
+#
+# 修改后执行：systemctl restart containerd
+
+server = "http://10.0.0.18:30080"
+
+[host."http://10.0.0.18:30080"]
+  capabilities = ["pull", "resolve"]
+  skip_verify = true   # Harbor 暂时 HTTP；切换 HTTPS 后改为 false 并挂载 ca.crt

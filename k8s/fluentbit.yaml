@@ -1,0 +1,123 @@
+# Fluent Bit 日志采集：容器 stdout/stderr → Elasticsearch → Kibana
+# 运行时为 containerd（非 docker），日志通过 /var/log/containers 符号链接读取
+# 相比常见模板修正点：
+#   1) 补上 ClusterRoleBinding（原方案遗漏，否则 RBAC 不生效）
+#   2) 挂载 /var/lib/containerd/containers（而非 /var/lib/docker/containers）
+#   3) 使用 CRI 解析器（containerd 日志为 CRI 格式，非 docker json）
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentbit
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentbit
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentbit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fluentbit
+subjects:
+  - kind: ServiceAccount
+    name: fluentbit
+    namespace: kube-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentbit-config
+  namespace: kube-system
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        5
+        Log_Level    info
+        Daemon       off
+        Parsers_File parsers.conf
+
+    [INPUT]
+        Name             tail
+        Path             /var/log/containers/*.log
+        Parser           cri
+        Tag              kube.*
+        Mem_Buf_Limit    10MB
+        Skip_Long_Lines  On
+        Refresh_Interval 10
+
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Merge_Log           On
+
+    [OUTPUT]
+        Name               es
+        Match              kube.*
+        Host               elasticsearch.logging.svc.cluster.local
+        Port               9200
+        Index              k8s-logs
+        Suppress_Type_Name On
+
+  parsers.conf: |
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentbit
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: fluentbit
+  template:
+    metadata:
+      labels:
+        app: fluentbit
+    spec:
+      serviceAccountName: fluentbit
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: fluentbit
+          image: fluent/fluent-bit:3.0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+            - name: varlibcontainers
+              mountPath: /var/lib/containerd/containers
+              readOnly: true
+            - name: config
+              mountPath: /fluent-bit/etc
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibcontainers
+          hostPath:
+            path: /var/lib/containerd/containers
+        - name: config
+          configMap:
+            name: fluentbit-config

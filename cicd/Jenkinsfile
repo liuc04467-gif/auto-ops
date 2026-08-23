@@ -1,103 +1,53 @@
-// OpsLab CI/CD Pipeline
-// Build -> Test -> Push -> Deploy -> Verify
+// OpsLab CI/CD Pipeline：Build → Push → Deploy → Verify
 //
 // 部署环境：
-//   Jenkins : K8s devops 命名空间, NodePort http://10.0.0.18:30081
+//   Jenkins : http://10.0.0.18:30081  (K8s devops 命名空间)
 //   Harbor  : http://10.0.0.18:30080  (admin / Harbor12345)
 //   K8s API : k8s-master (10.0.0.18:6443)
 //
-// Kubernetes Cloud 动态 agent 配置：
-//   在 Jenkins -> 系统管理 -> Clouds -> Kubernetes 配置 kubernetes plugin，
-//   Pod 模板参考如下（含 docker + kubectl 两个容器）：
-
-/*
-podTemplate 参考 (Jenkins Cloud 配置, 非 Jenkinsfile 内置):
-apiVersion: v1
-kind: Pod
-spec:
-  containers:
-    - name: jnlp
-      image: docker.m.daocloud.io/jenkins/inbound-agent:latest-jdk17
-    - name: docker
-      image: docker.m.daocloud.io/docker:27-dind
-      securityContext:
-        privileged: true
-    - name: kubectl
-      image: docker.m.daocloud.io/bitnami/kubectl:latest
-*/
+// 凭证配置（Jenkins → Manage Credentials → Add）：
+//   1. Username with password → ID: harbor-creds（admin / Harbor12345）
+//   2. Secret text           → ID: kube-config（内容为 /root/.kube/config 的 base64）
+//
+// Harbor 项目：登录 30080 后台新建项目 ops-app（公开或私有）
+// containerd 信任：所有 K8s 节点配置 k8s/containerd-harbor-hosts.toml
 
 pipeline {
-    agent any        // 生产可切换为 agent { kubernetes { ... } }
+    agent any
 
     environment {
-        HARBOR_URL = '10.0.0.18:30080'
-        IMAGE_NAME = 'opslab/web-app'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
-        KUBECONFIG = credentials('kubeconfig')
+        HARBOR = '10.0.0.18:30080'
+        IMAGE  = "${HARBOR}/ops-app/webapp:${env.BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Build') {
             steps {
-                sh '''
-                    docker build \
-                      -f docker/Dockerfile \
-                      -t ${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
-                      .
-                '''
+                sh 'docker build -t ${IMAGE} .'
             }
         }
 
-        stage('Test') {
+        stage('Push') {
             steps {
-                sh 'echo "Running unit tests..."'
-                // 实际测试命令在此补充
+                withCredentials([usernamePassword(credentialsId: 'harbor-creds',
+                                                 usernameVariable: 'U', passwordVariable: 'P')]) {
+                    sh 'echo $P | docker login ${HARBOR} -u $U --password-stdin'
+                    sh 'docker push ${IMAGE}'
+                }
             }
         }
 
-        stage('Push to Harbor') {
+        stage('Deploy') {
             steps {
-                sh '''
-                    docker login ${HARBOR_URL} -u $HARBOR_USER -p $HARBOR_PASS
-                    docker push ${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG}
-                '''
-            }
-        }
-
-        stage('Deploy to K8s') {
-            steps {
-                sh '''
-                    kubectl set image deployment/web-app \
-                      web-app=${HARBOR_URL}/${IMAGE_NAME}:${IMAGE_TAG} \
-                      -n opslab
-                    kubectl rollout status deployment/web-app -n opslab
-                '''
-            }
-        }
-
-        stage('Verify') {
-            steps {
-                sh '''
-                    sleep 5
-                    kubectl get pods -n opslab
-                    curl -s -o /dev/null -w "%{http_code}" http://app.opslab.local/health
-                '''
+                withCredentials([string(credentialsId: 'kube-config', variable: 'KC')]) {
+                    sh 'echo $KC | base64 -d > /tmp/kubeconfig && export KUBECONFIG=/tmp/kubeconfig && kubectl set image deploy/webapp webapp=${IMAGE} && kubectl rollout status deploy/webapp'
+                }
             }
         }
     }
 
     post {
-        success {
-            echo "Deploy successful: ${IMAGE_NAME}:${IMAGE_TAG}"
-        }
-        failure {
-            echo "Deploy failed"
-        }
+        success { echo "Deploy successful: ${IMAGE}" }
+        failure { echo "Deploy failed: ${IMAGE}" }
     }
 }
