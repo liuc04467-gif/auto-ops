@@ -68,8 +68,7 @@ auto-ops/
 ├── configs/                   # Service config files
 ├── docker/                    # Dockerfile + docker-compose
 ├── k8s/                       # K8s YAML + Helm values（含中间件）
-├── cicd/                      # Jenkinsfile
-└── screenshots/               # Dashboard, alerts, architecture diagrams
+└── cicd/                      # Jenkinsfile
 ```
 
 ## Quick Start

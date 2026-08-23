@@ -21,8 +21,6 @@ Thumbs.db
 ansible/*.retry
 
 # Screenshots (selective upload)
-screenshots/*.raw
-screenshots/*.tmp
 
 # Large files
 *.rpm
