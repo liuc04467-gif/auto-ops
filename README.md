@@ -143,9 +143,7 @@ kubectl get pods -A
 | Middleware | Jenkins, Elasticsearch, Kibana |
 | CI/CD | Jenkins Pipeline |
 
-## License
 
-MIT
 
 ## Author
 
