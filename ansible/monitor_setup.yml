@@ -5,6 +5,9 @@
 # - MySQL Exporter (db01/db02)
 # - HAProxy Exporter (lb01/lb02)
 # - Prometheus + Grafana (monitor)
+#
+# ⚠ 安全提示：监控用户密码（Monitor@123）为实验环境默认值，生产环境请
+#   改用 ansible-vault 加密或从 Secret 管理平台注入。
 # ============================================================
 
 # ========================================

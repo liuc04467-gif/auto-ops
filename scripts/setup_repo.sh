@@ -1,11 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================
 # OpsLab - GitHub repo structure generator
+# 说明：历史引导脚本，用于一次性生成仓库骨架；当前仓库内容
+#       已在骨架基础上持续演进，请勿再次运行以覆盖现有文件。
 # Run on m1: bash setup_repo.sh
 # ============================================================
+set -euo pipefail
 
-REPO="/test-ops"
-cd $REPO || exit 1
+REPO="${1:-/test-ops}"
+cd "$REPO" || { echo "ERROR 目录不存在：$REPO"; exit 1; }
 
 # ---- create directory structure ----
 mkdir -p docs/01-foundation

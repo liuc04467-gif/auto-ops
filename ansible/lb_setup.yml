@@ -1,4 +1,11 @@
 ---
+# ============================================================
+# 阶段一：负载均衡层（HAProxy + Keepalived）
+# - lb01 为 MASTER、lb02 为 BACKUP，VRRP unicast 保证 VIP 漂移
+#
+# ⚠ 安全提示：Keepalived 认证口令（auth_pass）为实验环境默认值，生产环境
+#   请通过 group_vars 加密注入。
+# ============================================================
 - name: Setup HAProxy + Keepalived on lb01 and lb02
   hosts: lb
   gather_facts: yes

@@ -1,28 +1,51 @@
-# Secrets
+# =============================================================================
+# .gitignore - 排除敏感信息、本机产物与二进制大文件
+# =============================================================================
+
+# ---- 密钥与凭据（绝不入库）----
 *.key
 *.pem
 *.crt
+*.crt.pem
 .env
+.env.*
 *credentials*
+*secret*.yml
 
-# OS
+# ---- 操作系统 ----
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Editor
+# ---- 编辑器 / IDE ----
 *.swp
 *.swo
 *~
 .idea/
 .vscode/
+*.iml
 
-# Ansible
+# ---- Python ----
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---- Node / 前端（如后续引入）----
+node_modules/
+
+# ---- Ansible ----
 *.retry
 ansible/*.retry
 
-# Screenshots (selective upload)
+# ---- 日志 ----
+*.log
 
-# Large files
+# ---- 截图（选择性上传）----
+screenshots/*.raw
+screenshots/*.tmp
+
+# ---- 二进制大文件 ----
 *.rpm
 *.tar.gz
+*.tgz
 *.iso

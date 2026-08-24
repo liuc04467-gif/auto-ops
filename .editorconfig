@@ -1,0 +1,33 @@
+# =============================================================================
+# 顶层 .editorconfig：统一跨编辑器 / 跨平台的编码与缩进风格
+# 说明：需编辑器安装 EditorConfig 插件（或原生支持）
+# =============================================================================
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Shell 脚本：2 空格缩进
+[*.sh]
+indent_size = 2
+
+# Python：4 空格缩进（PEP 8）
+[*.py]
+indent_size = 4
+
+# PHP：4 空格缩进（PSR-12）
+[*.php]
+indent_size = 4
+
+# Markdown：保留行尾空格（避免破坏换行语法）
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefile：必须使用 Tab 缩进
+[Makefile]
+indent_style = tab

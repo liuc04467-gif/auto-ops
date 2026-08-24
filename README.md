@@ -77,7 +77,7 @@ flowchart TB
     MON -.采集.-> DATA
 ```
 
-> 更完整的 ASCII 三版架构演进见 [docs/architecture.md](docs/architecture.md)，交互式拓扑图见仓库根目录 `Architecture.html`。
+> 更完整的 ASCII 三版架构演进见 [docs/architecture.md](docs/architecture.md)。
 
 ---
 
@@ -136,7 +136,7 @@ flowchart TB
 | k8s-node1 | 10.0.0.19 | 2C / 4G | Worker（Redis 主 + Jenkins + Harbor Core） |
 | k8s-node2 | 10.0.0.20 | 2C / 4G | Worker（Redis 从 + ES + Kibana + Harbor DB） |
 
-> 网段 `10.0.0.0/24` · 网关 `10.0.0.2` · 账号 `root/opsuser` 密码 `123456`（仅实验环境）
+> 网段 `10.0.0.0/24` · 网关 `10.0.0.2` · 账号 `root/opsuser` 密码 `123456`（仅实验环境，生产请替换）
 
 ---
 
@@ -163,18 +163,20 @@ flowchart TB
 
 ```
 auto-ops/
-├── README.md                     # 本文件（项目门面）
-├── Architecture.html             # 交互式架构拓扑图
-├── ansible/                      # Ansible inventory + playbooks
-├── scripts/                      # Shell：init / join / fix / backup / deploy / check
+├── README.md                     # 项目门面（架构 / 技术栈 / 使用说明）
+├── LICENSE                       # MIT 开源协议
+├── Makefile                      # 常用任务统一入口（make help 查看）
+├── .editorconfig                 # 跨编辑器编码与缩进统一
+├── ansible/                      # inventory + playbooks（7 阶段自动化部署）
+├── scripts/                      # Shell 运维脚本（备份 / 部署 / 健康检查 / K8s 引导）
 ├── configs/                      # haproxy、keepalived、nginx、mysql、php-fpm、prometheus 配置
-├── app/                          # 示例应用（index.php / health.php / 读写分离测试）
+├── app/                          # 示例应用（index.php + health.php，含输入校验与容错）
 ├── docker/                       # Dockerfile + docker-compose + nginx/supervisord
 ├── k8s/                          # K8s YAML 全集 + Helm values（含 Harbor/Redis/Jenkins/ES/Kibana）
-├── cicd/                         # Jenkinsfile
+├── cicd/                         # Jenkinsfile（声明式 Pipeline）
 └── docs/                         # 文档即简历
     ├── architecture.md           # 架构演进：传统 → 容器 → K8s
-    ├── 01-foundation/  … 07-cicd/  # 每阶段一篇：做了什么 / 踩坑 / 验证
+    ├── 01-foundation/ … 07-cicd/ # 每阶段一篇：做了什么 / 踩坑 / 验证
     └── troubleshooting/          # ★ 真实故障演练记录（面试亮点）
 ```
 
@@ -197,17 +199,25 @@ ansible-playbook ansible/web_setup.yml
 ansible-playbook ansible/db_setup.yml
 ansible-playbook ansible/monitor_setup.yml
 
+# 3'. 或使用统一部署入口（等价于上面的分步执行）
+./scripts/deploy.sh all
+
 # 4. K8s 集群部署
 ansible-playbook -i ansible/hosts.ini ansible/k8s_setup.yml
 ssh root@10.0.0.18 'bash /root/init_master.sh'
-ssh root@10.0.0.19 'bash /root/join_worker.sh'
-ssh root@10.0.0.20 'bash /root/join_worker.sh'
+ssh root@10.0.0.19 'bash /root/join_worker.sh 10.0.0.18 <token> <ca_hash>'
+ssh root@10.0.0.20 'bash /root/join_worker.sh 10.0.0.18 <token> <ca_hash>'
 
 # 5. K8s 中间件一键 apply（顺序见 k8s/README.md）
 kubectl apply -f k8s/redis_master_slave.yaml
 kubectl apply -f k8s/jenkins.yaml
 kubectl apply -f k8s/es_kibana.yaml
 helm install harbor harbor/harbor -n harbor --create-namespace -f k8s/harbor-values.yaml
+
+# 6. 日常运维可用 make 简化操作
+make help          # 查看所有任务
+make check         # 健康检查
+make backup DB=opslab
 ```
 
 ---
@@ -246,6 +256,34 @@ kubectl get pods -A
 
 ---
 
+## 运维脚本
+
+`scripts/` 下所有脚本统一遵循：`set -euo pipefail` 严格模式、结构化日志（INFO/WARN/ERROR）、白名单输入校验、依赖预检与显式退出码。
+
+| 脚本 | 用途 | 关键特性 |
+|------|------|----------|
+| `scripts/backup.sh` | MySQL 逻辑备份 + 过期清理 | 库名白名单、失败清理、GTID 兼容、非空校验 |
+| `scripts/deploy.sh` | 按阶段运行 Ansible playbook | 阶段白名单、声明式映射、依赖预检、多阶段组合 |
+| `scripts/check.sh` | 集群健康检查 | 拓扑可配置、超时控制、汇总退出码（0/1） |
+| `scripts/harbor-tls.sh` | Harbor 自签证书 + K8s Secret | 域名/命名空间校验、幂等写入 |
+| `scripts/es-snapshot.sh` | Elasticsearch 快照备份 | 保留天数校验、参数经环境变量注入 |
+| `scripts/fix_cni_plugins.sh` | 修复 CNI 插件缺失 | 版本校验、镜像源自动切换、完整性校验 |
+| `scripts/join_worker.sh` | K8s Worker 加入集群 | token/ca-hash 格式校验、containerd 就绪等待 |
+| `scripts/init_master.sh` | K8s master 控制平面初始化 | 变量校验、分段日志、显式退出码 |
+| `scripts/setup_repo.sh` | 仓库骨架引导（历史脚本） | 幂等提示、目标目录校验 |
+
+---
+
+## 工程实践
+
+- **输入校验**：脚本对所有参数/环境变量做白名单与类型校验（库名、域名、token、IP、版本号等）；`app/index.php` 对注入配置做主机名/库名白名单校验，杜绝 DNS/DSN 注入。
+- **错误处理**：统一 `set -euo pipefail` + `trap` 失败清理 + 结构化日志；健康检查逐项独立并汇总退出码，可接入告警/CI。
+- **安全**：密码优先经环境变量 / `.my.cnf` / K8s Secret 注入，仓库不落明文密钥（`.gitignore` 排除 `*.key/*.pem/*.crt/.env`）；PHP 输出统一 HTML 转义防 XSS。
+- **一致性**：统一脚本头注释、日志函数、目录结构；`.editorconfig` 锁定编码与缩进；`Makefile` 提供统一任务入口。
+- **可维护性**：声明式映射（deploy.sh 的阶段 → playbook）、幂等操作（harbor-tls 先删后建、备份失败自动清理）。
+
+---
+
 ## 故障演练（面试亮点）
 
 每一个真实踩坑都沉淀为文档，见 [docs/troubleshooting/](docs/troubleshooting/)：
@@ -278,6 +316,7 @@ kubectl get pods -A
 | 容器 / 编排 | Docker、containerd、Harbor、Kubernetes |
 | CI/CD | Jenkins Pipeline |
 | 日志 | Fluent Bit、Elasticsearch、Kibana |
+| 工程化 | Shell 校验、Ansible 幂等、容器多阶段构建、配置管理 |
 
 ---
 

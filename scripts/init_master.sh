@@ -1,6 +1,12 @@
-#!/bin/bash
-# /root/init_master.sh - 运行在 k8s-master (10.0.0.18)
-set -o pipefail
+#!/usr/bin/env bash
+# =============================================================================
+# 脚本：scripts/init_master.sh
+# 描述：初始化 k8s-master 控制平面（kubeadm init + Flannel CNI + join 命令生成）
+# 运行节点：k8s-master (10.0.0.18)
+# 说明：脚本内多处命令允许失败并显式判断退出码，故不启用 set -e，
+#       仅启用 -u（未定义变量报错）与 -o pipefail（管道失败可捕获）。
+# =============================================================================
+set -uo pipefail
 LOG=/root/init_master.log
 FLAG_DONE=/root/init_master.done
 FLAG_FAIL=/root/init_master.failed
@@ -11,9 +17,14 @@ export KUBECONFIG=/root/.kube/config
 export CONTAINER_RUNTIME_ENDPOINT=unix:///run/containerd/containerd.sock
 CRI=unix:///run/containerd/containerd.sock
 ALI="registry.aliyuncs.com/google_containers"
+MASTER_IP="10.0.0.18"
 POD_CIDR="10.244.0.0/16"
 SVC_CIDR="10.96.0.0/12"
 VER="v1.31.14"
+
+# ---- 输入校验 ---------------------------------------------------------------
+[[ "$VER" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR 非法 K8s 版本 '$VER'"; exit 2; }
+[[ "$MASTER_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "ERROR 非法 master IP '$MASTER_IP'"; exit 2; }
 
 echo "======== [T0] $(date '+%H:%M:%S') ========"
 echo "host=$(hostname -s) CONTAINER_RUNTIME_ENDPOINT=$CONTAINER_RUNTIME_ENDPOINT"
@@ -69,9 +80,9 @@ echo ""
 
 echo "======== [T4] $(date '+%H:%M:%S') kubeadm init ========"
 kubeadm init \
-  --apiserver-advertise-address=10.0.0.18 \
+  --apiserver-advertise-address=${MASTER_IP} \
   --apiserver-bind-port=6443 \
-  --control-plane-endpoint=10.0.0.18:6443 \
+  --control-plane-endpoint=${MASTER_IP}:6443 \
   --kubernetes-version=$VER \
   --pod-network-cidr=$POD_CIDR \
   --service-cidr=$SVC_CIDR \
